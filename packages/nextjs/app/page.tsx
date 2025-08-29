@@ -60,7 +60,14 @@ const Home: NextPage = () => {
               </code>
             </p>
           </div>
-          <Link href="/challenge002">Challenge 002</Link>
+          <div className="flex gap-2">
+            <Link href="/challenge001" className="bg-white/40 rounded-lg p-2">
+              Challenge 001
+            </Link>
+            <Link href="/challenge002" className="bg-white/40 rounded-lg p-2">
+              Challenge 002
+            </Link>
+          </div>
         </div>
 
         <div

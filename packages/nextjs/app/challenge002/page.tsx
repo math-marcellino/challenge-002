@@ -81,7 +81,7 @@ export default function Page() {
           href="https://sepolia.arbiscan.io/address/0x0C149FbbBE49baB59B1d1d0749f4109F02a46F77#code"
           className="underline"
         >
-          0x0C149FbbBE49baB59B1d1d0749f4109F02a46F77
+          0x0C149FbbBE49baB59B1d1d0749f4109F02a46F77 (Arbitrum Sepolia)
         </a>
       </p>
       <p>Challenge 002: Multi-Send Tool</p>
