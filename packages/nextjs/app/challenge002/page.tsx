@@ -166,7 +166,7 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
     query: { enabled: address != null },
   });
 
-  const { data: gasEstimate } = useQuery({
+  const { data: gasEstimate, refetch: refetchGasEstimate } = useQuery({
     queryKey: ["gasEstimate"],
     queryFn: async () => {
       if (publicClient == null) return null;
@@ -221,10 +221,7 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
       if (publicClient == null) throw new Error("Public client is not available yet");
       if (tokenBalance == null) throw new Error("Token balance is not available yet");
 
-      const recipients = parseRecipientToken(rawValue, tokenInfo.decimals);
-
-      const values = recipients.map(recipients => recipients.value);
-      const totalValue = values.reduce((accumulator, currentValue) => accumulator + currentValue, 0n);
+      const totalValue = parsedInput.totalValue;
 
       if (tokenBalance < totalValue) throw new Error("You don't have enough balance");
 
@@ -241,6 +238,7 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
       });
 
       refetchAllowance();
+      refetchGasEstimate();
     } catch (e) {
       console.log(e);
       setError(e instanceof Error ? e.message : String(e));
@@ -253,13 +251,13 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
       if (!address && accountStatus === "disconnected") throw new Error("Wallet is not connected!");
       if (publicClient == null) throw new Error("Public client is not available yet");
       if (tokenBalance == null) throw new Error("Token balance is not available yet");
+      if (allowance == null) throw new Error("Allowance is not available yet");
 
-      const recipients = parseRecipientToken(rawValue, tokenInfo.decimals);
+      const addresses = parsedInput.addresses;
+      const values = parsedInput.values;
+      const totalValue = parsedInput.totalValue;
 
-      const addresses = recipients.map(recipients => recipients.address);
-      const values = recipients.map(recipients => recipients.value);
-      const totalValue = values.reduce((accumulator, currentValue) => accumulator + currentValue, 0n);
-
+      if (allowance < totalValue) throw new Error("You don't have enough allowance");
       if (tokenBalance < totalValue) throw new Error("You don't have enough balance");
 
       const hash = await writeMultisend({
@@ -353,17 +351,20 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
         </>
       )}
       {txHash && (
-        <p>
-          Transaction submitted at{" "}
-          <a
-            href={`${arbitrumSepolia.blockExplorers.default.url}/tx/${txHash}`}
-            rel="noopener noreferrer"
-            target="_blank"
-            className="text-blue-700"
-          >
-            {formatAddress(txHash)}
-          </a>
-        </p>
+        <div className="flex flex-col">
+          <p>Transaction Status Tracking</p>
+          <p>
+            Transaction submitted at{" "}
+            <a
+              href={`${arbitrumSepolia.blockExplorers.default.url}/tx/${txHash}`}
+              rel="noopener noreferrer"
+              target="_blank"
+              className="text-blue-700"
+            >
+              {formatAddress(txHash)}
+            </a>
+          </p>
+        </div>
       )}
     </div>
   );
