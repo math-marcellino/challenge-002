@@ -3,5 +3,6 @@
     "./packages/stylus/your-contract/Cargo.toml"
   ],
   "rust-analyzer.cargo.buildScripts.enable": true,
-  "rust-analyzer.cargo.features": "all"
+  "rust-analyzer.cargo.features": "all",
+  "editor.defaultFormatter": "esbenp.prettier-vscode"
 }

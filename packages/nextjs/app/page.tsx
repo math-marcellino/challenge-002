@@ -8,6 +8,7 @@ import { Address } from "~~/components/scaffold-eth";
 import CompassIcon from "~~/icons/CompassIcon";
 import DarkBugAntIcon from "~~/icons/DarkBugAntIcon";
 import LightBugAntIcon from "~~/icons/LightBugAntIcon";
+import Link from "next/link";
 
 const Home: NextPage = () => {
   const { address: connectedAddress } = useAccount();
@@ -59,6 +60,7 @@ const Home: NextPage = () => {
               </code>
             </p>
           </div>
+          <Link href="/challenge002">Challenge 002</Link>
         </div>
 
         <div
