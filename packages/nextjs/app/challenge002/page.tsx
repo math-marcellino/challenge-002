@@ -72,43 +72,79 @@ export default function Page() {
   );
 
   return (
-    <div className="flex flex-col px-12 py-6">
-      <p>
-        Multisend Contract Address:{" "}
-        <a
-          target="_blank"
-          rel="noopener noreferrer"
-          href="https://sepolia.arbiscan.io/address/0x0C149FbbBE49baB59B1d1d0749f4109F02a46F77#code"
-          className="underline"
-        >
-          0x0C149FbbBE49baB59B1d1d0749f4109F02a46F77 (Arbitrum Sepolia)
-        </a>
-      </p>
-      <p>Challenge 002: Multi-Send Tool</p>
-
-      <MintDummyTokenSection />
-
-      <div className="flex flex-col gap-y-4">
-        <p>Load token contract</p>
-        <input
-          type="text"
-          placeholder="Token contract address"
-          className="border w-full rounded-lg p-2"
-          onChange={e => setTokenAddress(e.target.value as Address)}
-        />
-
-        {tokenInfo.error ? (
-          tokenInfo.error.cause instanceof ContractFunctionZeroDataError ||
-          tokenInfo.error.name === "ContractFunctionExecutionError" ? (
-            <p className="text-[#FF0000]">Token not found</p>
-          ) : (
-            <p className="text-[#FF0000]">{tokenInfo.error.message}</p>
-          )
-        ) : null}
-
-        {tokenInfo.fetchStatus === "fetching" ? <p className="animate-pulse">Loading...</p> : null}
+    <div className="flex flex-col px-12 py-6 space-y-6">
+      {/* Header Section */}
+      <div className="text-center">
+        <h1 className="text-3xl font-bold text-gray-200 mb-2">Multi-Send Tool</h1>
+        <p className="text-sm text-gray-500">Arbitrum Sepolia</p>
+        <div className="mt-4 p-3 bg-base-200 rounded-lg">
+          <p className="text-sm font-medium">Multisend Contract:</p>
+          <a
+            target="_blank"
+            rel="noopener noreferrer"
+            href="https://sepolia.arbiscan.io/address/0x0C149FbbBE49baB59B1d1d0749f4109F02a46F77#code"
+            className="font-mono text-xs break-all text-blue-600 hover:text-blue-800 underline"
+          >
+            0x0C149FbbBE49baB59B1d1d0749f4109F02a46F77
+          </a>
+        </div>
       </div>
 
+      {/* Mint Dummy Token Section */}
+      <div className="card bg-base-100 shadow-lg border border-base-300">
+        <div className="card-body">
+          <h2 className="card-title text-xl mb-4">Test Tokens</h2>
+          <MintDummyTokenSection />
+        </div>
+      </div>
+
+      {/* Token Input Section */}
+      <div className="card bg-base-100 shadow-lg border border-base-300">
+        <div className="card-body">
+          <h2 className="card-title text-xl mb-4">Load Token Contract</h2>
+          <div className="space-y-4">
+            <input
+              type="text"
+              placeholder="Enter token contract address (0x...)"
+              className="input input-bordered w-full"
+              onChange={e => setTokenAddress(e.target.value as Address)}
+            />
+
+            {tokenInfo.error ? (
+              <div className="alert alert-error">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="stroke-current shrink-0 h-6 w-6"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <span>
+                  {tokenInfo.error.cause instanceof ContractFunctionZeroDataError ||
+                  tokenInfo.error.name === "ContractFunctionExecutionError"
+                    ? "Token not found"
+                    : tokenInfo.error.message}
+                </span>
+              </div>
+            ) : null}
+
+            {tokenInfo.fetchStatus === "fetching" && (
+              <div className="alert alert-info">
+                <span className="loading loading-spinner loading-sm"></span>
+                <span>Loading token information...</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Multisend Section */}
       {tokenInfo.status === "success" && tokenAddress != null && token != null ? (
         <MultisendSection tokenAddress={tokenAddress} tokenInfo={token} />
       ) : null}
@@ -287,110 +323,255 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
   // #endregion
 
   return (
-    <div className="flex flex-col gap-y-4">
-      <div className="flex justify-between">
-        <p>Enter wallets and amounts</p>
-        {tokenBalance ? (
-          <p>
-            Balance:{" "}
-            {Number.parseFloat(formatUnits(tokenBalance, tokenInfo.decimals)).toLocaleString("en-US", {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}{" "}
-            {tokenInfo.symbol}
-          </p>
-        ) : (
-          <p className="animate-pulse">Loading...</p>
-        )}
-      </div>
+    <div className="card bg-base-100 shadow-lg border border-base-300">
+      <div className="card-body space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="card-title text-xl">Multi-Send Configuration</h2>
+          <div className="badge badge-outline">
+            {tokenInfo.name} ({tokenInfo.symbol})
+          </div>
+        </div>
 
-      <textarea
-        value={rawValue}
-        onChange={e => setRawValue(e.target.value)}
-        spellCheck="false"
-        className="border w-full min-h-[150px] rounded-lg p-2"
-        placeholder="Accepted input formats: 0x4186A3B76843Ab221c4d4dE1f9C83623C2db9D90 0.05 or 0x69aDB71215B1906a913bC8f2eca5881Ba62ABAa6,0.15 or 0x9E071a05644f536E7809f800fC4368c352c0D7f2=1.15 or 0xE5F093AF55E07AaeDE5A533a76B88AE32CcF95FD;2"
-      />
-
-      {accountStatus === "connected" ? (
-        <>
-          {allowance != null && allowance >= parsedInput.totalValue ? (
-            <button
-              type="button"
-              onClick={multisendToken}
-              disabled={multisendStatus === "pending" || rawValue === ""}
-              className={`${multisendStatus === "pending" ? "animate-pulse" : undefined} bg-white/40 rounded-lg p-2 disabled:cursor-not-allowed disabled:opacity-50`}
-            >
-              Multisend{" "}
-              {Number.parseFloat(formatUnits(parsedInput.totalValue, tokenInfo.decimals)).toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}{" "}
-              {tokenInfo.symbol}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={approveToken}
-              disabled={approveStatus === "pending" || rawValue === ""}
-              className={`${approveStatus === "pending" ? "animate-pulse" : undefined} bg-white/40 rounded-lg p-2 disabled:cursor-not-allowed disabled:opacity-50`}
-            >
-              Approve{" "}
-              {Number.parseFloat(formatUnits(parsedInput.totalValue, tokenInfo.decimals)).toLocaleString("en-US", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}{" "}
-              {tokenInfo.symbol}
-            </button>
-          )}
-        </>
-      ) : (
-        <p>Please connect your wallet first</p>
-      )}
-
-      {error ? (
-        <p className="text-red-700">{error}</p>
-      ) : (
-        <>
-          {allowance != null && allowance >= parsedInput.totalValue && rawValue !== "" ? (
-            <div className="flex flex-col">
-              <p>
-                Gas Estimate (Multisend to {parsedInput.addresses.length} recipients):{" "}
-                {gasEstimate?.multisendGas.toLocaleString()}
-              </p>
-              <p>Gas Estimate (Single Send to 1 recipient): {gasEstimate?.singleSendGas.toLocaleString()}</p>
-              <p>
-                Gas Estimate (Single Send to {parsedInput.addresses.length} recipients):{" "}
-                {gasEstimate?.singleSendGas &&
-                  (gasEstimate?.singleSendGas * BigInt(parsedInput.addresses.length)).toLocaleString()}
-              </p>
+        {/* Balance Display */}
+        <div className="stats shadow">
+          <div className="stat">
+            <div className="stat-title">Your Balance</div>
+            <div className="stat-value text-lg">
+              {tokenBalance ? (
+                <>
+                  {Number.parseFloat(formatUnits(tokenBalance, tokenInfo.decimals)).toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  <span className="text-sm">{tokenInfo.symbol}</span>
+                </>
+              ) : (
+                <span className="loading loading-dots loading-md"></span>
+              )}
             </div>
-          ) : (
-            <p>Approve to see estimated gas</p>
-          )}
-        </>
-      )}
-      {txHash && (
-        <div className="flex flex-col">
-          <p>Transaction Status Tracking</p>
-          <p>
-            Transaction submitted at{" "}
-            <a
-              href={`${arbitrumSepolia.blockExplorers.default.url}/tx/${txHash}`}
-              rel="noopener noreferrer"
-              target="_blank"
-              className="text-blue-700"
-            >
-              {formatAddress(txHash)}
-            </a>
-          </p>
-          {isConfirmed ? (
-            <p>Transaction confirmed with 3 block confirmations! You can check the block explorer for more details</p>
-          ) : (
-            <p className="animate-pulse">Waiting for 3 block confirmation</p>
+          </div>
+        </div>
+
+        {/* Input Section */}
+        <div className="space-y-4">
+          <div>
+            <label className="label">
+              <span className="label-text font-medium">Recipients and Amounts</span>
+              <span className="label-text-alt">
+                {parsedInput.addresses.length > 0 && `${parsedInput.addresses.length} recipients`}
+              </span>
+            </label>
+            <textarea
+              value={rawValue}
+              onChange={e => setRawValue(e.target.value)}
+              spellCheck="false"
+              className="textarea textarea-bordered rounded-lg w-full min-h-[150px]"
+              placeholder="Enter recipients and amounts. Supported formats:&#10;0x4186A3B76843Ab221c4d4dE1f9C83623C2db9D90 0.05&#10;0x69aDB71215B1906a913bC8f2eca5881Ba62ABAa6,0.15&#10;0x9E071a05644f536E7809f800fC4368c352c0D7f2=1.15&#10;0xE5F093AF55E07AaeDE5A533a76B88AE32CcF95FD;2"
+            />
+          </div>
+
+          {/* Total Amount Display */}
+          {parsedInput.totalValue > 0n && (
+            <div className="alert alert-info">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                className="stroke-current shrink-0 w-6 h-6"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                ></path>
+              </svg>
+              <span>
+                Total to send:{" "}
+                {Number.parseFloat(formatUnits(parsedInput.totalValue, tokenInfo.decimals)).toLocaleString("en-US", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}{" "}
+                {tokenInfo.symbol}
+              </span>
+            </div>
           )}
         </div>
-      )}
+
+        {/* Action Buttons */}
+        <div className="space-y-4">
+          {accountStatus === "connected" ? (
+            <>
+              {allowance != null && allowance >= parsedInput.totalValue ? (
+                <button
+                  type="button"
+                  onClick={multisendToken}
+                  disabled={multisendStatus === "pending" || rawValue === ""}
+                  className="btn btn-primary w-full"
+                >
+                  {multisendStatus === "pending" && <span className="loading loading-spinner loading-sm"></span>}
+                  Multisend{" "}
+                  {Number.parseFloat(formatUnits(parsedInput.totalValue, tokenInfo.decimals)).toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  {tokenInfo.symbol}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={approveToken}
+                  disabled={approveStatus === "pending" || rawValue === ""}
+                  className="btn btn-secondary w-full"
+                >
+                  {approveStatus === "pending" && <span className="loading loading-spinner loading-sm"></span>}
+                  Approve{" "}
+                  {Number.parseFloat(formatUnits(parsedInput.totalValue, tokenInfo.decimals)).toLocaleString("en-US", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  {tokenInfo.symbol}
+                </button>
+              )}
+            </>
+          ) : (
+            <div className="alert alert-warning">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="stroke-current shrink-0 h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+                />
+              </svg>
+              <span>Please connect your wallet first</span>
+            </div>
+          )}
+        </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="alert alert-error">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="stroke-current shrink-0 h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Gas Estimates */}
+        {!error && allowance != null && allowance >= parsedInput.totalValue && rawValue !== "" && (
+          <div className="card bg-base-200">
+            <div className="card-body">
+              <h3 className="card-title text-lg">Gas Estimates</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="stat">
+                  <div className="stat-title">Multisend</div>
+                  <div className="stat-value text-sm">
+                    {gasEstimate?.multisendGas.toLocaleString() || "Calculating..."}
+                  </div>
+                  <div className="stat-desc">To {parsedInput.addresses.length} recipients</div>
+                </div>
+                <div className="stat">
+                  <div className="stat-title">Single Send</div>
+                  <div className="stat-value text-sm">
+                    {gasEstimate?.singleSendGas.toLocaleString() || "Calculating..."}
+                  </div>
+                  <div className="stat-desc">Per transaction</div>
+                </div>
+                <div className="stat">
+                  <div className="stat-title">Individual Sends</div>
+                  <div className="stat-value text-sm">
+                    {gasEstimate?.singleSendGas
+                      ? (gasEstimate?.singleSendGas * BigInt(parsedInput.addresses.length)).toLocaleString()
+                      : "Calculating..."}
+                  </div>
+                  <div className="stat-desc">Total for {parsedInput.addresses.length} txs</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!error && (!allowance || allowance < parsedInput.totalValue) && rawValue !== "" && (
+          <div className="alert alert-info">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              className="stroke-current shrink-0 w-6 h-6"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              ></path>
+            </svg>
+            <span>Approve tokens to see gas estimates</span>
+          </div>
+        )}
+
+        {/* Transaction Status */}
+        {txHash && (
+          <div className="card bg-base-200">
+            <div className="card-body">
+              <h3 className="card-title text-lg">Transaction Status</h3>
+              <div className="space-y-2">
+                <p className="flex items-center gap-2">
+                  <span>Transaction Hash:</span>
+                  <a
+                    href={`${arbitrumSepolia.blockExplorers.default.url}/tx/${txHash}`}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                    className="link link-primary font-mono text-sm"
+                  >
+                    {formatAddress(txHash)}
+                  </a>
+                </p>
+                {isConfirmed ? (
+                  <div className="alert alert-success">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="stroke-current shrink-0 h-6 w-6"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <span>Transaction confirmed with 3 block confirmations!</span>
+                  </div>
+                ) : (
+                  <div className="alert alert-info">
+                    <span className="loading loading-spinner loading-sm"></span>
+                    <span>Waiting for 3 block confirmations...</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
