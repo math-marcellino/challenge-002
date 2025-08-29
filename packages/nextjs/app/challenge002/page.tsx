@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Address,
   ContractFunctionZeroDataError,
@@ -117,11 +117,38 @@ export default function Page() {
 }
 
 function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; tokenInfo: Token }) {
+  // #region States
   const [rawValue, setRawValue] = useState("");
   const [error, setError] = useState<string>();
   const [txHash, setTxHash] = useState<string>();
+  const parsedInput = useMemo(() => {
+    try {
+      setError(undefined);
+      const recipients = parseRecipientToken(rawValue, tokenInfo.decimals);
 
+      const addresses = recipients.map(recipients => recipients.address);
+      const values = recipients.map(recipients => recipients.value);
+      const totalValue = values.reduce((accumulator, currentValue) => accumulator + currentValue, 0n);
+
+      return {
+        addresses,
+        values,
+        totalValue,
+      };
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return {
+        addresses: [],
+        values: [],
+        totalValue: 0n,
+      };
+    }
+  }, [rawValue, tokenInfo.decimals]);
+  // #endregion
+
+  // #region On-chain read functions
   const { address, status: accountStatus } = useAccount();
+  const publicClient = usePublicClient();
 
   const { data: tokenBalance, refetch: refetchBalance } = useReadContract({
     address: tokenAddress,
@@ -131,20 +158,22 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
     query: { enabled: address != null },
   });
 
-  const publicClient = usePublicClient();
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
+    address: tokenAddress,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: [address ?? zeroAddress, externalContracts[421614].Multisend.address],
+    query: { enabled: address != null },
+  });
 
   const { data: gasEstimate } = useQuery({
     queryKey: ["gasEstimate"],
     queryFn: async () => {
-      if (address == null && accountStatus === "disconnected") throw new Error("Wallet is not connected!");
-      if (publicClient == null) throw new Error("Public client is not available yet");
-      if (tokenBalance == null) throw new Error("Token balance is not available yet");
+      if (publicClient == null) return null;
 
-      const recipients = parseRecipientToken(rawValue, tokenInfo.decimals);
-
-      const addresses = recipients.map(recipients => recipients.address);
-      const values = recipients.map(recipients => recipients.value);
-      const totalValue = values.reduce((accumulator, currentValue) => accumulator + currentValue, 0n);
+      const addresses = parsedInput.addresses;
+      const values = parsedInput.values;
+      const totalValue = parsedInput.totalValue;
 
       const [multisendGas, singleSendGas] = await Promise.all([
         publicClient.estimateContractGas({
@@ -152,12 +181,14 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
           abi: externalContracts[421614].Multisend.abi,
           functionName: "multisendERC20",
           args: [tokenAddress, addresses, values, totalValue],
+          account: address,
         }),
         publicClient.estimateContractGas({
           address: externalContracts[421614].DummyToken.address,
           abi: externalContracts[421614].DummyToken.abi,
           functionName: "transfer",
           args: [addresses[0], values[0]],
+          account: address,
         }),
       ]);
 
@@ -166,13 +197,24 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
         singleSendGas,
       };
     },
+    enabled:
+      address != null &&
+      accountStatus === "connected" &&
+      publicClient != null &&
+      tokenBalance != null &&
+      parsedInput.addresses.length > 0,
   });
+  // #endregion
 
-  // Disperse Token
+  useEffect(() => {
+    refetchAllowance();
+  }, [rawValue, refetchAllowance]);
+
+  // #region Write Functions
   const { writeContractAsync: writeApprove, status: approveStatus } = useWriteContract();
-  const { writeContractAsync: writeDisperse, status: disperseStatus } = useWriteContract();
+  const { writeContractAsync: writeMultisend, status: multisendStatus } = useWriteContract();
 
-  const multisendToken = async () => {
+  const approveToken = async () => {
     setError(undefined);
     try {
       if (!address && accountStatus === "disconnected") throw new Error("Wallet is not connected!");
@@ -181,7 +223,6 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
 
       const recipients = parseRecipientToken(rawValue, tokenInfo.decimals);
 
-      const addresses = recipients.map(recipients => recipients.address);
       const values = recipients.map(recipients => recipients.value);
       const totalValue = values.reduce((accumulator, currentValue) => accumulator + currentValue, 0n);
 
@@ -199,7 +240,29 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
         confirmations: 1,
       });
 
-      const hash = await writeDisperse({
+      refetchAllowance();
+    } catch (e) {
+      console.log(e);
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const multisendToken = async () => {
+    setError(undefined);
+    try {
+      if (!address && accountStatus === "disconnected") throw new Error("Wallet is not connected!");
+      if (publicClient == null) throw new Error("Public client is not available yet");
+      if (tokenBalance == null) throw new Error("Token balance is not available yet");
+
+      const recipients = parseRecipientToken(rawValue, tokenInfo.decimals);
+
+      const addresses = recipients.map(recipients => recipients.address);
+      const values = recipients.map(recipients => recipients.value);
+      const totalValue = values.reduce((accumulator, currentValue) => accumulator + currentValue, 0n);
+
+      if (tokenBalance < totalValue) throw new Error("You don't have enough balance");
+
+      const hash = await writeMultisend({
         address: externalContracts[421614].Multisend.address,
         abi: externalContracts[421614].Multisend.abi,
         functionName: "multisendERC20",
@@ -213,6 +276,7 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
       setError(e instanceof Error ? e.message : String(e));
     }
   };
+  // #endregion
 
   return (
     <div className="flex flex-col gap-y-4">
@@ -241,19 +305,53 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
       />
 
       {accountStatus === "connected" ? (
-        <button
-          type="button"
-          onClick={multisendToken}
-          disabled={disperseStatus === "pending" || approveStatus === "pending"}
-          className={`${disperseStatus === "pending" || approveStatus === "pending" ? "animate-pulse" : undefined} bg-white/40 rounded-lg p-2`}
-        >
-          Approve & Multisend
-        </button>
+        <>
+          {allowance != null && allowance >= parsedInput.totalValue ? (
+            <button
+              type="button"
+              onClick={multisendToken}
+              disabled={multisendStatus === "pending" || rawValue === ""}
+              className={`${multisendStatus === "pending" ? "animate-pulse" : undefined} bg-white/40 rounded-lg p-2 disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              Multisend
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={approveToken}
+              disabled={approveStatus === "pending" || rawValue === ""}
+              className={`${approveStatus === "pending" ? "animate-pulse" : undefined} bg-white/40 rounded-lg p-2 disabled:cursor-not-allowed disabled:opacity-50`}
+            >
+              Approve
+            </button>
+          )}
+        </>
       ) : (
         <p>Please connect your wallet first</p>
       )}
 
-      {error && <p className="text-red-700">{error}</p>}
+      {error ? (
+        <p className="text-red-700">{error}</p>
+      ) : (
+        <>
+          {allowance != null && allowance >= parsedInput.totalValue && rawValue !== "" ? (
+            <div className="flex flex-col">
+              <p>
+                Gas Estimate (Multisend to {parsedInput.addresses.length} recipients):{" "}
+                {gasEstimate?.multisendGas.toLocaleString()}
+              </p>
+              <p>Gas Estimate (Single Send to 1 recipient): {gasEstimate?.singleSendGas.toLocaleString()}</p>
+              <p>
+                Gas Estimate (Single Send to {parsedInput.addresses.length} recipients):{" "}
+                {gasEstimate?.singleSendGas &&
+                  (gasEstimate?.singleSendGas * BigInt(parsedInput.addresses.length)).toLocaleString()}
+              </p>
+            </div>
+          ) : (
+            <p>Approve to see estimated gas</p>
+          )}
+        </>
+      )}
       {txHash && (
         <p>
           Transaction submitted at{" "}
