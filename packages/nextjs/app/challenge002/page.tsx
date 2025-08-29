@@ -121,6 +121,7 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
   const [rawValue, setRawValue] = useState("");
   const [error, setError] = useState<string>();
   const [txHash, setTxHash] = useState<string>();
+  const [isConfirmed, setIsConfirmed] = useState(false);
   const parsedInput = useMemo(() => {
     try {
       setError(undefined);
@@ -260,6 +261,7 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
       if (allowance < totalValue) throw new Error("You don't have enough allowance");
       if (tokenBalance < totalValue) throw new Error("You don't have enough balance");
 
+      // Execute the transaction
       const hash = await writeMultisend({
         address: externalContracts[421614].Multisend.address,
         abi: externalContracts[421614].Multisend.abi,
@@ -267,8 +269,16 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
         args: [tokenAddress, addresses, values, totalValue],
       });
 
-      refetchBalance();
       setTxHash(hash);
+
+      // Wait for 3 block confirmation
+      await publicClient.waitForTransactionReceipt({
+        hash,
+        confirmations: 3,
+      });
+      setIsConfirmed(true);
+
+      refetchBalance();
     } catch (e) {
       console.log(e);
       setError(e instanceof Error ? e.message : String(e));
@@ -311,7 +321,12 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
               disabled={multisendStatus === "pending" || rawValue === ""}
               className={`${multisendStatus === "pending" ? "animate-pulse" : undefined} bg-white/40 rounded-lg p-2 disabled:cursor-not-allowed disabled:opacity-50`}
             >
-              Multisend
+              Multisend{" "}
+              {Number.parseFloat(formatUnits(parsedInput.totalValue, tokenInfo.decimals)).toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}{" "}
+              {tokenInfo.symbol}
             </button>
           ) : (
             <button
@@ -320,7 +335,12 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
               disabled={approveStatus === "pending" || rawValue === ""}
               className={`${approveStatus === "pending" ? "animate-pulse" : undefined} bg-white/40 rounded-lg p-2 disabled:cursor-not-allowed disabled:opacity-50`}
             >
-              Approve
+              Approve{" "}
+              {Number.parseFloat(formatUnits(parsedInput.totalValue, tokenInfo.decimals)).toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}{" "}
+              {tokenInfo.symbol}
             </button>
           )}
         </>
@@ -364,6 +384,11 @@ function MultisendSection({ tokenAddress, tokenInfo }: { tokenAddress: Address; 
               {formatAddress(txHash)}
             </a>
           </p>
+          {isConfirmed ? (
+            <p>Transaction confirmed with 3 block confirmations! You can check the block explorer for more details</p>
+          ) : (
+            <p className="animate-pulse">Waiting for 3 block confirmation</p>
+          )}
         </div>
       )}
     </div>
