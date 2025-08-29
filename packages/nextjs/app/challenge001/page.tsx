@@ -2,7 +2,7 @@
 
 import { CurrencyAmount, Token } from "@uniswap/sdk-core";
 import { Pair, Route } from "@uniswap/v2-sdk";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { erc20Abi, formatUnits, parseAbi, zeroAddress } from "viem";
 import { mainnet } from "viem/chains";
 import { useAccount, useReadContracts } from "wagmi";
@@ -17,6 +17,7 @@ const uniswapv2PairAbi = parseAbi([
 export default function Page() {
   const { address, status: accountStatus } = useAccount();
   const ethPrice = useNativeCurrencyPrice();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const tokenList = useMemo(
     () => [
@@ -35,9 +36,9 @@ export default function Page() {
     ],
     [],
   );
-  const { data: rawTokens, refetch: refetchRawTokens } = useReadContracts({
+  const { data: rawData, refetch: refetchData } = useReadContracts({
     contracts: tokenList.flatMap(token => [
-      // Balance
+      // Token data (4 calls per token)
       {
         address: token.tokenAddress as `0x${string}`,
         abi: erc20Abi,
@@ -45,35 +46,25 @@ export default function Page() {
         args: [address ?? zeroAddress],
         chainId: mainnet.id,
       },
-      // Decimals
       {
         address: token.tokenAddress as `0x${string}`,
         abi: erc20Abi,
         functionName: "decimals",
         chainId: mainnet.id,
       },
-      // Name
       {
         address: token.tokenAddress as `0x${string}`,
         abi: erc20Abi,
         functionName: "name",
         chainId: mainnet.id,
       },
-      // Symbol
       {
         address: token.tokenAddress as `0x${string}`,
         abi: erc20Abi,
         functionName: "symbol",
         chainId: mainnet.id,
       },
-    ]),
-    query: {
-      enabled: address != null && accountStatus === "connected",
-    },
-  });
-
-  const { data: rawPriceData, refetch: refetchRawPriceData } = useReadContracts({
-    contracts: tokenList.flatMap(token => [
+      // Price data (3 calls per token)
       {
         address: token.pairAddress as `0x${string}`,
         abi: uniswapv2PairAbi,
@@ -98,83 +89,85 @@ export default function Page() {
     },
   });
 
-  const refreshData = () => {
-    refetchRawTokens();
-    refetchRawPriceData();
+  const refreshData = async () => {
+    setIsRefreshing(true);
+    try {
+      await refetchData();
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const tokens = useMemo(() => {
-    // First, build basic tokens array
+    // Build tokens array with integrated price calculation
     const tokens = [];
-    if (rawTokens != null) {
-      for (let i = 0; i < rawTokens.length; i += 4) {
-        const tokenIndex = Math.floor(i / 4);
-        tokens.push({
-          address: tokenList[tokenIndex]?.tokenAddress,
-          balance: rawTokens[i].result as bigint,
-          decimals: rawTokens[i + 1].result as number,
-          name: rawTokens[i + 2].result as string,
-          symbol: rawTokens[i + 3].result as string,
-          usdPrice: 0,
-          balanceUsd: 0,
-        });
-      }
-    }
-
-    // Then, calculate prices and update tokens
-    if (rawPriceData != null && tokens.length > 0) {
+    if (rawData != null) {
       const WETH = new Token(1, "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", 18);
 
-      for (let i = 0; i < rawPriceData.length; i += 3) {
-        const tokenIndex = Math.floor(i / 3);
-        const currentToken = tokens[tokenIndex];
+      for (let tokenIndex = 0; tokenIndex < tokenList.length; tokenIndex++) {
+        // Each token has 7 calls: 4 for token data + 3 for price data
+        const baseIndex = tokenIndex * 7;
 
-        if (!currentToken) {
-          continue;
+        // Extract token data (first 4 calls)
+        const balanceResult = rawData[baseIndex]?.result as bigint | undefined;
+        const decimalsResult = rawData[baseIndex + 1]?.result as number | undefined;
+        const nameResult = rawData[baseIndex + 2]?.result as string | undefined;
+        const symbolResult = rawData[baseIndex + 3]?.result as string | undefined;
+
+        // Extract price data (next 3 calls)
+        const reservesResult = rawData[baseIndex + 4]?.result as readonly [bigint, bigint, number] | undefined;
+        const token0Result = rawData[baseIndex + 5]?.result as string | undefined;
+        const token1Result = rawData[baseIndex + 6]?.result as string | undefined;
+
+        if (balanceResult == null || decimalsResult == null || nameResult == null || symbolResult == null) {
+          continue; // Skip if token data is missing
         }
 
-        // Check if all required contract call results are available
-        const reservesResult = rawPriceData[i]?.result as readonly [bigint, bigint, number] | undefined;
-        const token0Result = rawPriceData[i + 1]?.result as string | undefined;
-        const token1Result = rawPriceData[i + 2]?.result as string | undefined;
+        const tokenData = {
+          address: tokenList[tokenIndex]?.tokenAddress,
+          balance: balanceResult,
+          decimals: decimalsResult,
+          name: nameResult,
+          symbol: symbolResult,
+          usdPrice: 0,
+          balanceUsd: 0,
+        };
 
-        if (!reservesResult || !token0Result || !token1Result) {
-          continue; // Skip this iteration if any data is missing
-        }
+        // Calculate price if price data is available
+        if (reservesResult && token0Result && token1Result) {
+          try {
+            const TOKEN = new Token(1, tokenData.address, tokenData.decimals);
+            const token0 = [WETH, TOKEN].find(
+              token => token.address.toLowerCase() === token0Result.toLowerCase(),
+            ) as Token;
+            const token1 = [WETH, TOKEN].find(
+              token => token.address.toLowerCase() === token1Result.toLowerCase(),
+            ) as Token;
 
-        try {
-          const TOKEN = new Token(1, currentToken.address, currentToken.decimals);
-          const token0 = [WETH, TOKEN].find(
-            token => token.address.toLowerCase() === token0Result.toLowerCase(),
-          ) as Token;
-          const token1 = [WETH, TOKEN].find(
-            token => token.address.toLowerCase() === token1Result.toLowerCase(),
-          ) as Token;
+            if (token0 && token1) {
+              const pair = new Pair(
+                CurrencyAmount.fromRawAmount(token0, reservesResult[0].toString()),
+                CurrencyAmount.fromRawAmount(token1, reservesResult[1].toString()),
+              );
+              const route = new Route([pair], TOKEN, WETH);
+              const usdPrice = parseFloat(route.midPrice.toSignificant(6)) * ethPrice;
+              const balanceInTokens = parseFloat(formatUnits(tokenData.balance, tokenData.decimals));
+              const balanceUsd = balanceInTokens * usdPrice;
 
-          if (!token0 || !token1) {
-            continue; // Skip if tokens not found
+              tokenData.usdPrice = usdPrice;
+              tokenData.balanceUsd = balanceUsd;
+            }
+          } catch (error) {
+            console.error(`Error calculating price for token ${tokenData.address}:`, error);
           }
-
-          const pair = new Pair(
-            CurrencyAmount.fromRawAmount(token0, reservesResult[0].toString()),
-            CurrencyAmount.fromRawAmount(token1, reservesResult[1].toString()),
-          );
-          const route = new Route([pair], TOKEN, WETH);
-          const usdPrice = parseFloat(route.midPrice.toSignificant(6)) * ethPrice;
-          const balanceInTokens = parseFloat(formatUnits(currentToken.balance, currentToken.decimals));
-          const balanceUsd = balanceInTokens * usdPrice;
-
-          // Update the token with price data
-          currentToken.usdPrice = usdPrice;
-          currentToken.balanceUsd = balanceUsd;
-        } catch (error) {
-          console.error(`Error calculating price for token ${currentToken.address}:`, error);
         }
+
+        tokens.push(tokenData);
       }
     }
 
     return tokens;
-  }, [rawTokens, rawPriceData, tokenList, ethPrice]);
+  }, [rawData, tokenList, ethPrice]);
 
   if (accountStatus === "connecting" || accountStatus === "reconnecting") {
     return <p className="animate-pulse px-12 py-6">Loading...</p>;
@@ -191,24 +184,29 @@ export default function Page() {
           <h1 className="text-3xl font-bold text-gray-200">Multi-Read Dashboard</h1>
           <button
             onClick={refreshData}
-            className="btn btn-sm btn-primary bg-blue-600 hover:bg-blue-700 border-blue-600 hover:border-blue-700 text-white"
+            disabled={isRefreshing}
+            className="btn btn-sm btn-primary bg-blue-600 hover:bg-blue-700 border-blue-600 hover:border-blue-700 text-white disabled:opacity-50"
             title="Refresh data"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
-            Refresh
+            {isRefreshing ? (
+              <span className="loading loading-spinner loading-sm"></span>
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+            )}
+            {isRefreshing ? "Refreshing..." : "Refresh"}
           </button>
         </div>
         <p className="text-sm text-gray-500">Ethereum Mainnet</p>
