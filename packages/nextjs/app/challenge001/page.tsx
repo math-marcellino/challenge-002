@@ -2,7 +2,7 @@
 
 import { CurrencyAmount, Token } from "@uniswap/sdk-core";
 import { Pair, Route } from "@uniswap/v2-sdk";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { erc20Abi, formatUnits, parseAbi, zeroAddress } from "viem";
 import { mainnet } from "viem/chains";
 import { useAccount, useReadContracts } from "wagmi";
@@ -18,6 +18,8 @@ export default function Page() {
   const { address, status: accountStatus } = useAccount();
   const ethPrice = useNativeCurrencyPrice();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [fetchStartTime, setFetchStartTime] = useState<number | null>(null);
+  const [totalFetchTime, setTotalFetchTime] = useState<number | null>(null);
 
   const tokenList = useMemo(
     () => [
@@ -89,8 +91,24 @@ export default function Page() {
     },
   });
 
+  // Track when data starts loading and when it's complete
+  useEffect(() => {
+    if (address && accountStatus === "connected" && !fetchStartTime) {
+      setFetchStartTime(Date.now());
+    }
+  }, [address, accountStatus, fetchStartTime]);
+
+  // Check if all data is loaded and calculate fetch time
+  useEffect(() => {
+    if (rawData && fetchStartTime && !totalFetchTime) {
+      setTotalFetchTime(Date.now() - fetchStartTime);
+    }
+  }, [rawData, fetchStartTime, totalFetchTime]);
+
   const refreshData = async () => {
     setIsRefreshing(true);
+    setFetchStartTime(Date.now());
+    setTotalFetchTime(null);
     try {
       await refetchData();
     } finally {
@@ -209,7 +227,15 @@ export default function Page() {
             {isRefreshing ? "Refreshing..." : "Refresh"}
           </button>
         </div>
-        <p className="text-sm text-gray-500">Ethereum Mainnet</p>
+        <p className="text-sm text-gray-500">Ethereum Mainnet (Multicall)</p>
+
+        {/* Fetch Time Display */}
+        <div className="mt-2 p-2 bg-base-200 rounded-lg">
+          <p className="text-sm font-medium">
+            Total Fetch Time: {totalFetchTime ? `${totalFetchTime}ms` : "Measuring..."}
+          </p>
+        </div>
+
         <div className="mt-4 p-3 bg-base-200 rounded-lg">
           <p className="text-sm font-medium">Connected Account:</p>
           <p className="font-mono text-xs break-all">{address}</p>
