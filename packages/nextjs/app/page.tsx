@@ -70,6 +70,9 @@ const Home: NextPage = () => {
             <Link href="/challenge002" className="bg-white/40 rounded-lg p-2">
               Challenge 002
             </Link>
+            <Link href="/challenge003" className="bg-white/40 rounded-lg p-2">
+              Challenge 003
+            </Link>
           </div>
         </div>
 
