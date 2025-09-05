@@ -43,6 +43,8 @@
     "lint-staged": "^13.0.3"
   },
   "dependencies": {
+    "@aave/client": "latest",
+    "@aave/react": "latest",
     "@uniswap/v3-sdk": "^3.25.2"
   }
 }

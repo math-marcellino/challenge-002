@@ -14,6 +14,8 @@ import { BlockieAvatar } from "~~/components/scaffold-eth";
 import { useInitializeNativeCurrencyPrice, useTargetNetwork } from "~~/hooks/scaffold-eth";
 import { wagmiConfig } from "~~/services/web3/wagmiConfig";
 import { arbitrumNitro, initBurnerPK } from "~~/utils/scaffold-stylus";
+import { AaveProvider } from "@aave/react";
+import { client as aaveClient } from "~~/services/aave/client";
 
 const ScaffoldEthApp = ({ children }: { children: React.ReactNode }) => {
   useInitializeNativeCurrencyPrice();
@@ -69,7 +71,9 @@ export const ScaffoldEthAppWithProviders = ({ children }: { children: React.Reac
           avatar={BlockieAvatar}
           theme={mounted ? (isDarkMode ? darkTheme() : lightTheme()) : lightTheme()}
         >
-          <ScaffoldEthApp>{children}</ScaffoldEthApp>
+          <AaveProvider client={aaveClient}>
+            <ScaffoldEthApp>{children}</ScaffoldEthApp>
+          </AaveProvider>
         </RainbowKitProvider>
       </QueryClientProvider>
     </WagmiProvider>
